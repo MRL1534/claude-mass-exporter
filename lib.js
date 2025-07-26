@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Claude Mass Exporter Library
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      2.0
 // @description  Mass export library for Claude API Exporter
 // @author       MRL
 // @license      MIT
@@ -162,48 +162,98 @@
 
         const selectionOverlay = document.createElement('div');
         selectionOverlay.id = 'claude-selection-ui';
-        selectionOverlay.innerHTML = `
-            <div class="claude-selection-overlay">
-                <div class="claude-selection-modal">
-                    <div class="claude-selection-header">
-                        <h3>📋 ${title}</h3>
-                        <button class="claude-selection-close" type="button">×</button>
-                    </div>
-                    <div class="claude-selection-content">
-                        <div class="claude-selection-controls">
-                            <button class="claude-btn claude-btn-secondary" type="button" id="selectAll">Select All</button>
-                            <button class="claude-btn claude-btn-secondary" type="button" id="selectNone">Select None</button>
-                            <span class="claude-selection-count">0 selected</span>
+        
+        // Check if items are projects (have uuid and can have chats)
+        const isProjectSelection = title.includes('Projects') && items.length > 0 && items[0].uuid;
+        
+        if (isProjectSelection) {
+            // Hierarchical project selection
+            selectionOverlay.innerHTML = `
+                <div class="claude-selection-overlay">
+                    <div class="claude-selection-modal">
+                        <div class="claude-selection-header">
+                            <h3>📋 ${title}</h3>
+                            <button class="claude-selection-close" type="button">×</button>
                         </div>
-                        <div class="claude-selection-list" id="selectionList">
-                            ${items.map((item, index) => `
-                                <div class="claude-selection-item">
-                                    <input type="checkbox" id="item-${index}" value="${index}" class="claude-selection-checkbox">
-                                    <label for="item-${index}" class="claude-selection-label">
-                                        <div class="claude-selection-name">${item.name}</div>
-                                        <div class="claude-selection-meta">${item.meta || ''}</div>
-                                    </label>
-                                </div>
-                            `).join('')}
+                        <div class="claude-selection-content">
+                            <div class="claude-selection-controls">
+                                <button class="claude-btn claude-btn-secondary" type="button" id="selectAllProjects">Select All Projects</button>
+                                <button class="claude-btn claude-btn-secondary" type="button" id="selectAllChats">Select All Chats</button>
+                                <button class="claude-btn claude-btn-secondary" type="button" id="selectNone">Select None</button>
+                                <span class="claude-selection-count">0 chats selected</span>
+                            </div>
+                            <div class="claude-selection-list" id="selectionList">
+                                ${items.map((project, projectIndex) => `
+                                    <div class="claude-project-item" data-project-index="${projectIndex}">
+                                        <div class="claude-project-header">
+                                            <button class="claude-project-toggle" type="button" data-project="${projectIndex}">
+                                                <span class="claude-toggle-icon">▶</span>
+                                            </button>
+                                            <input type="checkbox" id="project-${projectIndex}" class="claude-project-checkbox" data-project="${projectIndex}">
+                                            <label for="project-${projectIndex}" class="claude-project-label">
+                                                <div class="claude-project-name">📁 ${project.name}</div>
+                                                <div class="claude-project-meta">${project.meta || ''} | <span class="chat-count">Click to load chats...</span></div>
+                                            </label>
+                                        </div>
+                                        <div class="claude-project-chats" id="chats-${projectIndex}" style="display: none;">
+                                            <div class="claude-loading">Loading conversations...</div>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
                         </div>
-                    </div>
-                    <div class="claude-selection-footer">
-                        <button class="claude-btn claude-btn-secondary" type="button" id="cancelSelection">Cancel</button>
-                        <button class="claude-btn claude-btn-primary" type="button" id="exportSelected" disabled>Export Selected</button>
+                        <div class="claude-selection-footer">
+                            <button class="claude-btn claude-btn-secondary" type="button" id="cancelSelection">Cancel</button>
+                            <button class="claude-btn claude-btn-primary" type="button" id="exportSelected" disabled>Export Selected</button>
+                        </div>
                     </div>
                 </div>
-            </div>
-        `;
+            `;
+        } else {
+            // Regular flat selection
+            selectionOverlay.innerHTML = `
+                <div class="claude-selection-overlay">
+                    <div class="claude-selection-modal">
+                        <div class="claude-selection-header">
+                            <h3>📋 ${title}</h3>
+                            <button class="claude-selection-close" type="button">×</button>
+                        </div>
+                        <div class="claude-selection-content">
+                            <div class="claude-selection-controls">
+                                <button class="claude-btn claude-btn-secondary" type="button" id="selectAll">Select All</button>
+                                <button class="claude-btn claude-btn-secondary" type="button" id="selectNone">Select None</button>
+                                <span class="claude-selection-count">0 selected</span>
+                            </div>
+                            <div class="claude-selection-list" id="selectionList">
+                                ${items.map((item, index) => `
+                                    <div class="claude-selection-item">
+                                        <input type="checkbox" id="item-${index}" value="${index}" class="claude-selection-checkbox">
+                                        <label for="item-${index}" class="claude-selection-label">
+                                            <div class="claude-selection-name">${item.name}</div>
+                                            <div class="claude-selection-meta">${item.meta || ''}</div>
+                                        </label>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                        <div class="claude-selection-footer">
+                            <button class="claude-btn claude-btn-secondary" type="button" id="cancelSelection">Cancel</button>
+                            <button class="claude-btn claude-btn-primary" type="button" id="exportSelected" disabled>Export Selected</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
 
         const styles = `<style id="claude-selection-styles">
             .claude-selection-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:99999;font-family:system-ui,-apple-system,sans-serif}
-            .claude-selection-modal{background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.3);width:90%;max-width:600px;max-height:80vh;overflow:hidden;display:flex;flex-direction:column}
+            .claude-selection-modal{background:#fff;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,0.3);width:90%;max-width:700px;max-height:80vh;overflow:hidden;display:flex;flex-direction:column}
             .claude-selection-header{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white;padding:20px 24px;display:flex;align-items:center;justify-content:space-between}
             .claude-selection-header h3{margin:0;font-size:18px;font-weight:600}
             .claude-selection-close{background:none;border:none;color:white;font-size:24px;cursor:pointer;padding:0;width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;transition:background-color 0.2s}
             .claude-selection-close:hover{background:rgba(255,255,255,0.2)}
             .claude-selection-content{flex:1;overflow-y:auto;padding:24px}
-            .claude-selection-controls{display:flex;gap:12px;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #e2e8f0}
+            .claude-selection-controls{display:flex;gap:8px;align-items:center;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid #e2e8f0;flex-wrap:wrap}
             .claude-selection-count{margin-left:auto;font-size:14px;color:#718096;font-weight:500}
             .claude-selection-list{display:grid;gap:8px}
             .claude-selection-item{display:flex;align-items:flex-start;gap:12px;padding:12px;border:1px solid #e2e8f0;border-radius:8px;transition:all 0.2s}
@@ -212,54 +262,303 @@
             .claude-selection-label{flex:1;cursor:pointer;line-height:1.4}
             .claude-selection-name{font-weight:500;color:#2d3748;margin-bottom:4px}
             .claude-selection-meta{font-size:13px;color:#718096}
-            .claude-selection-footer{background:#f8fafc;padding:20px 24px;border-top:1px solid #e2e8f0;display:flex;gap:12px;justify-content:flex-end}
-            .claude-btn{padding:10px 20px;border:none;border-radius:6px;font-size:14px;font-weight:500;cursor:pointer;transition:all 0.2s}
+            
+            .claude-project-item{border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;transition:all 0.2s}
+            .claude-project-item:hover{border-color:#667eea}
+            .claude-project-header{display:flex;align-items:center;gap:8px;padding:12px;background:#f8fafc;cursor:pointer}
+            .claude-project-toggle{background:none;border:none;color:#718096;cursor:pointer;font-size:12px;padding:4px;border-radius:4px;transition:all 0.2s;min-width:20px}
+            .claude-project-toggle:hover{background:#e2e8f0}
+            .claude-toggle-icon{transition:transform 0.2s;display:inline-block}
+            .claude-toggle-icon.expanded{transform:rotate(90deg)}
+            .claude-project-checkbox{transform:scale(1.2)}
+            .claude-project-label{flex:1;cursor:pointer;line-height:1.4}
+            .claude-project-name{font-weight:600;color:#2d3748;margin-bottom:4px}
+            .claude-project-meta{font-size:13px;color:#718096}
+            .chat-count{font-weight:500;color:#667eea}
+            
+            .claude-project-chats{background:#fff;border-top:1px solid #e2e8f0}
+            .claude-chat-item{display:flex;align-items:center;gap:12px;padding:8px 16px 8px 48px;transition:all 0.2s;border-bottom:1px solid #f1f5f9}
+            .claude-chat-item:last-child{border-bottom:none}
+            .claude-chat-item:hover{background:#f8fafc}
+            .claude-chat-checkbox{transform:scale(1.1)}
+            .claude-chat-label{flex:1;cursor:pointer;line-height:1.3}
+            .claude-chat-name{font-weight:500;color:#374151;margin-bottom:2px}
+            .claude-chat-meta{font-size:12px;color:#9ca3af}
+            .claude-loading{padding:16px;text-align:center;color:#718096;font-style:italic}
+            .claude-error{padding:16px;text-align:center;color:#ef4444;font-size:13px}
+            
+            .claude-btn{padding:8px 16px;border:none;border-radius:6px;font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s}
             .claude-btn-primary{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:white}
             .claude-btn-primary:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 4px 12px rgba(102,126,234,0.4)}
             .claude-btn-primary:disabled{opacity:0.5;cursor:not-allowed}
-            .claude-btn-secondary{background:#e2e8f0;color:#2d3748}
+            .claude-btn-secondary{background:#e2e8f0;color:#2d3748;font-size:12px;padding:6px 12px}
             .claude-btn-secondary:hover{background:#cbd5e0}
+            .claude-selection-footer{background:#f8fafc;padding:20px 24px;border-top:1px solid #e2e8f0;display:flex;gap:12px;justify-content:flex-end}
         </style>`;
 
         document.head.insertAdjacentHTML('beforeend', styles);
         document.body.appendChild(selectionOverlay);
 
-        let selectedItems = new Set();
+        if (isProjectSelection) {
+            // Project selection logic
+            let selectedChats = new Map();
+            let projectChats = new Map();
+            let loadedProjects = new Set();
 
-        function updateUI() {
-            const count = selectedItems.size;
-            document.querySelector('.claude-selection-count').textContent = `${count} selected`;
-            document.getElementById('exportSelected').disabled = count === 0;
-        }
+            items.forEach((_, index) => {
+                selectedChats.set(index, new Set());
+            });
 
-        // Event listeners
-        document.querySelectorAll('.claude-selection-checkbox').forEach(checkbox => {
-            checkbox.addEventListener('change', (e) => {
-                const index = parseInt(e.target.value);
-                if (e.target.checked) {
-                    selectedItems.add(index);
-                } else {
-                    selectedItems.delete(index);
+            function updateUI() {
+                let totalSelectedChats = 0;
+                selectedChats.forEach(chatSet => {
+                    totalSelectedChats += chatSet.size;
+                });
+                
+                document.querySelector('.claude-selection-count').textContent = `${totalSelectedChats} chats selected`;
+                document.getElementById('exportSelected').disabled = totalSelectedChats === 0;
+                
+                items.forEach((_, projectIndex) => {
+                    const projectCheckbox = document.getElementById(`project-${projectIndex}`);
+                    const chats = projectChats.get(projectIndex) || [];
+                    const selectedChatSet = selectedChats.get(projectIndex);
+                    
+                    if (chats.length === 0) {
+                        // Don't change checkbox if it's currently checked (loading state)
+                        if (!projectCheckbox.checked) {
+                            projectCheckbox.indeterminate = false;
+                        }
+                    } else if (selectedChatSet.size === 0) {
+                        projectCheckbox.indeterminate = false;
+                        projectCheckbox.checked = false;
+                    } else if (selectedChatSet.size === chats.length) {
+                        projectCheckbox.indeterminate = false;
+                        projectCheckbox.checked = true;
+                    } else {
+                        projectCheckbox.indeterminate = true;
+                    }
+                });
+            }
+
+            async function loadProjectChats(projectIndex) {
+                if (loadedProjects.has(projectIndex)) return;
+                
+                const project = items[projectIndex];
+                const chatsContainer = document.getElementById(`chats-${projectIndex}`);
+                
+                try {
+                    const conversations = await getProjectConversations(project.uuid);
+                    projectChats.set(projectIndex, conversations);
+                    loadedProjects.add(projectIndex);
+                    
+                    const countElement = document.querySelector(`[data-project-index="${projectIndex}"] .chat-count`);
+                    countElement.textContent = `${conversations.length} chats`;
+                    
+                    chatsContainer.innerHTML = conversations.map((chat, chatIndex) => `
+                        <div class="claude-chat-item">
+                            <input type="checkbox" id="chat-${projectIndex}-${chatIndex}" class="claude-chat-checkbox" 
+                                   data-project="${projectIndex}" data-chat="${chatIndex}">
+                            <label for="chat-${projectIndex}-${chatIndex}" class="claude-chat-label">
+                                <div class="claude-chat-name">💬 ${chat.name}</div>
+                                <div class="claude-chat-meta">Updated: ${new Date(chat.updated_at).toLocaleDateString()}</div>
+                            </label>
+                        </div>
+                    `).join('');
+                    
+                    chatsContainer.querySelectorAll('.claude-chat-checkbox').forEach(checkbox => {
+                        checkbox.addEventListener('change', (e) => {
+                            const projectIdx = parseInt(e.target.dataset.project);
+                            const chatIdx = parseInt(e.target.dataset.chat);
+                            const selectedChatSet = selectedChats.get(projectIdx);
+                            
+                            if (e.target.checked) {
+                                selectedChatSet.add(chatIdx);
+                            } else {
+                                selectedChatSet.delete(chatIdx);
+                            }
+                            updateUI();
+                        });
+                    });
+                    
+                } catch (error) {
+                    console.error(`Failed to load chats for project ${project.name}:`, error);
+                    chatsContainer.innerHTML = '<div class="claude-error">❌ Failed to load conversations</div>';
+                    
+                    const countElement = document.querySelector(`[data-project-index="${projectIndex}"] .chat-count`);
+                    countElement.textContent = 'Error loading chats';
+                }
+            }
+
+            // Project toggle handlers - ONLY on arrow
+            document.querySelectorAll('.claude-project-toggle').forEach(element => {
+                element.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const projectIndex = parseInt(e.currentTarget.dataset.project);
+                    const chatsContainer = document.getElementById(`chats-${projectIndex}`);
+                    const toggleIcon = e.currentTarget.querySelector('.claude-toggle-icon');
+                    
+                    if (chatsContainer.style.display === 'none') {
+                        chatsContainer.style.display = 'block';
+                        toggleIcon.classList.add('expanded');
+                        await loadProjectChats(projectIndex);
+                    } else {
+                        chatsContainer.style.display = 'none';
+                        toggleIcon.classList.remove('expanded');
+                    }
+                });
+            });
+
+            // Project checkbox handlers
+            document.querySelectorAll('.claude-project-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', async (e) => {
+                    const projectIndex = parseInt(e.target.dataset.project);
+                    const selectedChatSet = selectedChats.get(projectIndex);
+                    
+                    if (e.target.checked) {
+                        // If chats not loaded yet, load them first
+                        if (!loadedProjects.has(projectIndex)) {
+                            e.target.disabled = true;
+                            await loadProjectChats(projectIndex);
+                            e.target.disabled = false;
+                        }
+                        
+                        const chats = projectChats.get(projectIndex) || [];
+                        
+                        // Select all chats
+                        chats.forEach((_, chatIndex) => {
+                            selectedChatSet.add(chatIndex);
+                            const chatCheckbox = document.getElementById(`chat-${projectIndex}-${chatIndex}`);
+                            if (chatCheckbox) chatCheckbox.checked = true;
+                        });
+                    } else {
+                        // Deselect all chats
+                        selectedChatSet.clear();
+                        const chats = projectChats.get(projectIndex) || [];
+                        chats.forEach((_, chatIndex) => {
+                            const chatCheckbox = document.getElementById(`chat-${projectIndex}-${chatIndex}`);
+                            if (chatCheckbox) chatCheckbox.checked = false;
+                        });
+                    }
+                    updateUI();
+                });
+            });
+
+            // Control buttons
+            document.getElementById('selectAllProjects').addEventListener('click', async () => {
+                for (let projectIndex = 0; projectIndex < items.length; projectIndex++) {
+                    if (!loadedProjects.has(projectIndex)) {
+                        await loadProjectChats(projectIndex);
+                    }
+                    
+                    const projectCheckbox = document.getElementById(`project-${projectIndex}`);
+                    projectCheckbox.checked = true;
+                    projectCheckbox.dispatchEvent(new Event('change'));
+                }
+            });
+
+            document.getElementById('selectAllChats').addEventListener('click', async () => {
+                for (let projectIndex = 0; projectIndex < items.length; projectIndex++) {
+                    if (!loadedProjects.has(projectIndex)) {
+                        await loadProjectChats(projectIndex);
+                    }
+                    
+                    const chats = projectChats.get(projectIndex) || [];
+                    const selectedChatSet = selectedChats.get(projectIndex);
+                    
+                    chats.forEach((_, chatIndex) => {
+                        selectedChatSet.add(chatIndex);
+                        const chatCheckbox = document.getElementById(`chat-${projectIndex}-${chatIndex}`);
+                        if (chatCheckbox) chatCheckbox.checked = true;
+                    });
                 }
                 updateUI();
             });
-        });
 
-        document.getElementById('selectAll').addEventListener('click', () => {
-            document.querySelectorAll('.claude-selection-checkbox').forEach(checkbox => {
-                checkbox.checked = true;
-                selectedItems.add(parseInt(checkbox.value));
+            document.getElementById('selectNone').addEventListener('click', () => {
+                selectedChats.forEach((chatSet, projectIndex) => {
+                    chatSet.clear();
+                    const projectCheckbox = document.getElementById(`project-${projectIndex}`);
+                    projectCheckbox.checked = false;
+                    
+                    const chats = projectChats.get(projectIndex) || [];
+                    chats.forEach((_, chatIndex) => {
+                        const chatCheckbox = document.getElementById(`chat-${projectIndex}-${chatIndex}`);
+                        if (chatCheckbox) chatCheckbox.checked = false;
+                    });
+                });
+                updateUI();
             });
-            updateUI();
-        });
 
-        document.getElementById('selectNone').addEventListener('click', () => {
-            document.querySelectorAll('.claude-selection-checkbox').forEach(checkbox => {
-                checkbox.checked = false;
+            // Export handler
+            document.getElementById('exportSelected').addEventListener('click', () => {
+                const selectedData = [];
+                
+                selectedChats.forEach((chatSet, projectIndex) => {
+                    if (chatSet.size > 0) {
+                        const project = items[projectIndex];
+                        const chats = projectChats.get(projectIndex) || [];
+                        
+                        const selectedProjectChats = Array.from(chatSet).map(chatIndex => chats[chatIndex]);
+                        
+                        selectedData.push({
+                            project: project,
+                            chats: selectedProjectChats
+                        });
+                    }
+                });
+                
+                closeModal();
+                onExport(selectedData);
             });
-            selectedItems.clear();
+
             updateUI();
-        });
+
+        } else {
+            // Regular selection logic
+            let selectedItems = new Set();
+
+            function updateUI() {
+                const count = selectedItems.size;
+                document.querySelector('.claude-selection-count').textContent = `${count} selected`;
+                document.getElementById('exportSelected').disabled = count === 0;
+            }
+
+            document.querySelectorAll('.claude-selection-checkbox').forEach(checkbox => {
+                checkbox.addEventListener('change', (e) => {
+                    const index = parseInt(e.target.value);
+                    if (e.target.checked) {
+                        selectedItems.add(index);
+                    } else {
+                        selectedItems.delete(index);
+                    }
+                    updateUI();
+                });
+            });
+
+            document.getElementById('selectAll').addEventListener('click', () => {
+                document.querySelectorAll('.claude-selection-checkbox').forEach(checkbox => {
+                    checkbox.checked = true;
+                    selectedItems.add(parseInt(checkbox.value));
+                });
+                updateUI();
+            });
+
+            document.getElementById('selectNone').addEventListener('click', () => {
+                document.querySelectorAll('.claude-selection-checkbox').forEach(checkbox => {
+                    checkbox.checked = false;
+                });
+                selectedItems.clear();
+                updateUI();
+            });
+
+            document.getElementById('exportSelected').addEventListener('click', () => {
+                const selected = Array.from(selectedItems).map(index => items[index]);
+                closeModal();
+                onExport(selected);
+            });
+
+            updateUI();
+        }
 
         // Common close handlers
         const closeModal = () => {
@@ -273,14 +572,6 @@
         document.querySelector('.claude-selection-overlay').addEventListener('click', (e) => {
             if (e.target.classList.contains('claude-selection-overlay')) closeModal();
         });
-
-        document.getElementById('exportSelected').addEventListener('click', () => {
-            const selected = Array.from(selectedItems).map(index => items[index]);
-            closeModal();
-            onExport(selected);
-        });
-
-        updateUI();
     }
 
     function createProgressUI(title) {
@@ -529,8 +820,8 @@
                 meta: `Created: ${new Date(project.created_at).toLocaleDateString()}`
             }));
 
-            createSelectionUI('Select Projects to Export', projectItems, async (selectedProjects) => {
-                await performProjectsExport(selectedProjects, exportMode);
+            createSelectionUI('Select Projects to Export', projectItems, async (selectedData) => {
+                await performProjectsExport(selectedData, exportMode);
             });
 
         } catch (error) {
@@ -539,7 +830,7 @@
         }
     }
 
-    async function performProjectsExport(selectedProjects, exportMode) {
+    async function performProjectsExport(selectedData, exportMode) {
         const progress = createProgressUI(`Mass Export - Selected Projects (${exportMode === 'none' ? 'conversations only' : exportMode})`);
         
         try {
@@ -548,21 +839,29 @@
             let totalExported = 0;
             
             // Count total conversations
-            for (let i = 0; i < selectedProjects.length; i++) {
-                if (progress.isCancelled()) return;
-                
-                const project = selectedProjects[i];
-                progress.updateProgress(i, selectedProjects.length, 'Counting conversations...', 
-                    `Project: ${project.name}`);
-                
-                try {
-                    const conversations = await getProjectConversations(project.uuid);
-                    totalConversations += conversations.length;
-                } catch (error) {
-                    console.warn(`Failed to fetch conversations for project ${project.name}:`, error);
+            if (Array.isArray(selectedData) && selectedData.length > 0 && selectedData[0].chats) {
+                // Hierarchical data
+                selectedData.forEach(projectData => {
+                    totalConversations += projectData.chats.length;
+                });
+            } else {
+                // Flat data - get conversations for each project
+                for (let i = 0; i < selectedData.length; i++) {
+                    if (progress.isCancelled()) return;
+                    
+                    const project = selectedData[i];
+                    progress.updateProgress(i, selectedData.length, 'Counting conversations...', 
+                        `Project: ${project.name}`);
+                    
+                    try {
+                        const conversations = await getProjectConversations(project.uuid);
+                        totalConversations += conversations.length;
+                    } catch (error) {
+                        console.warn(`Failed to fetch conversations for project ${project.name}:`, error);
+                    }
+                    
+                    await delay(100);
                 }
-                
-                await delay(100);
             }
 
             if (totalConversations === 0) {
@@ -572,41 +871,73 @@
             }
 
             // Export conversations
-            for (let i = 0; i < selectedProjects.length; i++) {
-                if (progress.isCancelled()) return;
-                
-                const project = selectedProjects[i];
-                const folderName = sanitizeFileName(project.name);
-                
-                try {
-                    const conversations = await getProjectConversations(project.uuid);
+            if (selectedData[0].chats) {
+                // Hierarchical export
+                for (const projectData of selectedData) {
+                    if (progress.isCancelled()) return;
                     
-                    for (let j = 0; j < conversations.length; j++) {
+                    const project = projectData.project;
+                    const chats = projectData.chats;
+                    const folderName = sanitizeFileName(project.name);
+                    
+                    for (const chat of chats) {
                         if (progress.isCancelled()) return;
                         
-                        const conversation = conversations[j];
                         currentConversation++;
                         
                         progress.updateProgress(currentConversation, totalConversations, 
                             `Exporting conversation ${currentConversation}/${totalConversations}`, 
-                            `Project: ${project.name} | Chat: ${conversation.name}`);
+                            `Project: ${project.name} | Chat: ${chat.name}`);
                         
                         try {
-                            const fullConversationData = await getConversationData(conversation.uuid);
+                            const fullConversationData = await getConversationData(chat.uuid);
                             const exportedCount = await exportSingleConversation(fullConversationData, folderName, exportMode);
                             totalExported += exportedCount;
                         } catch (error) {
-                            console.warn(`Failed to export conversation ${conversation.name}:`, error);
+                            console.warn(`Failed to export conversation ${chat.name}:`, error);
                         }
                         
                         await delay(200);
                     }
-                } catch (error) {
-                    console.warn(`Failed to process project ${project.name}:`, error);
+                }
+            } else {
+                // Flat export
+                for (let i = 0; i < selectedData.length; i++) {
+                    if (progress.isCancelled()) return;
+                    
+                    const project = selectedData[i];
+                    const folderName = sanitizeFileName(project.name);
+                    
+                    try {
+                        const conversations = await getProjectConversations(project.uuid);
+                        
+                        for (let j = 0; j < conversations.length; j++) {
+                            if (progress.isCancelled()) return;
+                            
+                            const conversation = conversations[j];
+                            currentConversation++;
+                            
+                            progress.updateProgress(currentConversation, totalConversations, 
+                                `Exporting conversation ${currentConversation}/${totalConversations}`, 
+                                `Project: ${project.name} | Chat: ${conversation.name}`);
+                            
+                            try {
+                                const fullConversationData = await getConversationData(conversation.uuid);
+                                const exportedCount = await exportSingleConversation(fullConversationData, folderName, exportMode);
+                                totalExported += exportedCount;
+                            } catch (error) {
+                                console.warn(`Failed to export conversation ${conversation.name}:`, error);
+                            }
+                            
+                            await delay(200);
+                        }
+                    } catch (error) {
+                        console.warn(`Failed to process project ${project.name}:`, error);
+                    }
                 }
             }
 
-            showNotification(`✅ Mass export completed! Downloaded ${totalExported} files from ${totalConversations} conversations across ${selectedProjects.length} projects`, 'success');
+            showNotification(`✅ Mass export completed! Downloaded ${totalExported} files from ${totalConversations} conversations`, 'success');
             
         } catch (error) {
             console.error('Mass export failed:', error);
@@ -691,7 +1022,6 @@
                 return;
             }
 
-            // Show selection UI
             const conversationItems = conversations.map(conv => ({
                 ...conv,
                 name: conv.name,
@@ -746,33 +1076,6 @@
             console.error('Export failed:', error);
             showNotification(`❌ Export failed: ${error.message}`, 'error');
         }
-    }
-
-    // =============================================
-    // SMART EXPORT DISPATCHER
-    // =============================================
-
-    function createSmartExportFunction(originalFunction, exportMode) {
-        return async function(...args) {
-            const context = getCurrentContext();
-            
-            if (context.type === 'chat') {
-                // In a chat - use original function
-                return originalFunction.apply(this, args);
-            } else if (context.type === 'projects') {
-                // In projects list - export all projects
-                return exportAllProjects(exportMode);
-            } else if (context.type === 'project') {
-                // In a project - export project conversations
-                return exportCurrentProject(exportMode);
-            } else if (context.type === 'recents') {
-                // In recents - export all recent conversations
-                return exportAllRecentConversations(exportMode);
-            } else {
-                // Unknown context - use original function
-                return originalFunction.apply(this, args);
-            }
-        };
     }
 
     // =============================================
