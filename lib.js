@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Claude Mass Exporter Library
 // @namespace    http://tampermonkey.net/
-// @version      3.0
+// @version      3.1
 // @description  Mass export library for Claude API Exporter
 // @author       MRL
 // @license      MIT
@@ -257,14 +257,18 @@
             
             try {
                 const conversations = await getProjectConversations(project.uuid);
-                projectChats.set(projectIndex, conversations);
+                
+                // Sort conversations by updated_at (newest first)
+                const sortedConversations = conversations.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+                
+                projectChats.set(projectIndex, sortedConversations);
                 loadedProjects.add(projectIndex);
                 
                 // Update count
-                document.querySelector(`[data-project-index="${projectIndex}"] .chat-count`).textContent = `${conversations.length} chats`;
+                document.querySelector(`[data-project-index="${projectIndex}"] .chat-count`).textContent = `${sortedConversations.length} chats`;
                 
                 // Generate chat list
-                chatsContainer.innerHTML = conversations.map((chat, chatIndex) => `
+                chatsContainer.innerHTML = sortedConversations.map((chat, chatIndex) => `
                     <div class="claude-chat-item">
                         <input type="checkbox" id="chat-${projectIndex}-${chatIndex}" class="claude-chat-checkbox" data-project="${projectIndex}" data-chat="${chatIndex}">
                         <label for="chat-${projectIndex}-${chatIndex}" class="claude-chat-label">
@@ -787,8 +791,11 @@
                 return;
             }
 
+            // Sort conversations by updated_at (newest first)
+            const sortedConversations = conversations.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+            
             // Show selection UI
-            const conversationItems = conversations.map(conv => ({
+            const conversationItems = sortedConversations.map(conv => ({
                 ...conv,
                 name: conv.name,
                 meta: `Updated: ${new Date(conv.updated_at).toLocaleDateString()}`
@@ -848,6 +855,10 @@
                 return;
             }
 
+            // Sort conversations by updated_at (newest first) - NOT REQUIRED
+            // const sortedConversations = conversations.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+            
+            // UPDATE: const conversationItems = sortedConversations.map(conv => ({
             const conversationItems = conversations.map(conv => ({
                 ...conv,
                 name: conv.name,
