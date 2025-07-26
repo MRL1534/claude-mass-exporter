@@ -158,7 +158,7 @@
                                         <input type="checkbox" id="project-${index}" class="claude-project-checkbox" data-project="${index}">
                                         <label for="project-${index}" class="claude-project-label">
                                             <div class="claude-project-name">📁 ${project.name}</div>
-                                            <div class="claude-project-meta">${project.meta || ''} | <span class="chat-count">Click ▶ to load chats</span></div>
+                                            <div class="claude-project-meta">${project.meta || ''} | <span class="chat-count">Click to load chats</span></div>
                                         </label>
                                     </div>
                                     <div class="claude-project-chats" id="chats-${index}" style="display: none;">
