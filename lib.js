@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Claude Mass Exporter Library
 // @namespace    http://tampermonkey.net/
-// @version      3.1
+// @version      3.2
 // @description  Mass export library for Claude API Exporter
 // @author       MRL
 // @license      MIT
@@ -593,22 +593,50 @@
     // EXPORT FUNCTIONS
     // =============================================
 
-    async function exportSingleConversation(conversationData, folderPrefix = '', exportMode = 'final') {
+    async function exportSingleConversation(conversationData, exportMode = 'final', archiveManager = null, projectFolderName = '', useChatFolders = false) {
         const mainScript = window.claudeExporter;
         if (!mainScript) throw new Error('Main exporter not available');
+
+        // Determine folder structure
+        const settings = mainScript.loadSettings();
+        let finalFolderPath = '';
+        
+        if (archiveManager && projectFolderName) {
+            // Mass export with project folders
+            if (useChatFolders) {
+                // Project/Chat/ structure
+                const chatFolderName = sanitizeFileName(conversationData.name);
+                finalFolderPath = `${projectFolderName}/${chatFolderName}`;
+            } else {
+                // Project/ structure (files directly in project folder)
+                finalFolderPath = projectFolderName;
+            }
+        } else if (archiveManager && useChatFolders) {
+            // Single export with chat folders (like main script)
+            finalFolderPath = sanitizeFileName(conversationData.name);
+        }
 
         // For 'none' mode (conversation only), use simple approach
         if (exportMode === 'none') {
             const conversationMarkdown = mainScript.generateConversationMarkdown(conversationData, 'none', null, null);
             let filename = mainScript.generateConversationFilename(conversationData);
-            if (folderPrefix) filename = `${folderPrefix}/${filename}`;
-            mainScript.downloadFile(filename, conversationMarkdown);
+            
+            // Add full path for archive
+            if (finalFolderPath) {
+                filename = `${finalFolderPath}/${filename}`;
+            }
+            
+            if (archiveManager) {
+                // Use full path in filename, no additional folder processing
+                await archiveManager.addFile(filename, conversationMarkdown, false, '');
+            } else {
+                mainScript.downloadFile(filename, conversationMarkdown);
+            }
             return 1;
         }
 
         // Use main script's export functions
         const { branchArtifacts, branchInfo } = mainScript.extractAllArtifacts(conversationData);
-        const settings = mainScript.loadSettings();
         
         let includeMode = exportMode === 'latest_per_message' ? 'latest_per_message' : exportMode === 'final' ? 'final' : 'all';
         let conversationMarkdown, shouldExportSeparateFiles = false;
@@ -628,12 +656,19 @@
                 break;
         }
         
-        // Generate filename with folder prefix
-        let filename = mainScript.generateConversationFilename(conversationData);
-        if (folderPrefix) filename = `${folderPrefix}/${filename}`;
+        // Generate filename with full path for archive
+        let finalFilename = mainScript.generateConversationFilename(conversationData);
+        if (finalFolderPath) {
+            finalFilename = `${finalFolderPath}/${finalFilename}`;
+        }
         
-        // Download conversation file
-        mainScript.downloadFile(filename, conversationMarkdown);
+        // Add conversation file
+        if (archiveManager) {
+            // Use full path in filename, no additional folder processing
+            await archiveManager.addFile(finalFilename, conversationMarkdown, false, '');
+        } else {
+            mainScript.downloadFile(finalFilename, conversationMarkdown);
+        }
         
         let exportedCount = 1; // Conversation file
         
@@ -659,12 +694,12 @@
                 });
             }
 
-            branchArtifacts.forEach((artifactsMap, branchId) => {
+            for (const [branchId, artifactsMap] of branchArtifacts) {
                 const branchData = branchInfo.find(b => b.branchId === branchId);
                 const branchLabel = branchData ? branchData.branchIndex.toString() : 'unknown';
                 const isMain = branchData ? branchData.isMainBranch : false;
                 
-                artifactsMap.forEach((versions, artifactId) => {
+                for (const [artifactId, versions] of artifactsMap) {
                     let versionsToExport = versions;
                     if (exportMode === 'latest_per_message') {
                         versionsToExport = versions.filter(version => latestArtifactTimestamps.has(version.content_stop_timestamp));
@@ -672,11 +707,15 @@
                         versionsToExport = [versions[versions.length - 1]];
                     }
 
-                    versionsToExport.forEach(version => {
-                        if (settings.excludeCanceledArtifacts && version.stop_reason === 'user_canceled') return;
+                    for (const version of versionsToExport) {
+                        if (settings.excludeCanceledArtifacts && version.stop_reason === 'user_canceled') continue;
                         
                         let artifactFilename = mainScript.generateArtifactFilename(version, conversationData, branchLabel, isMain, artifactId);
-                        if (folderPrefix) artifactFilename = `${folderPrefix}/${artifactFilename}`;
+                        
+                        // Add full path for archive
+                        if (finalFolderPath) {
+                            artifactFilename = `${finalFolderPath}/${artifactFilename}`;
+                        }
                         
                         const metadata = mainScript.formatArtifactMetadata(version, artifactId, branchLabel, isMain);
                         let processedContent = version.fullContent;
@@ -685,11 +724,18 @@
                         }
                         
                         const content = metadata ? metadata + '\n' + processedContent : processedContent;
-                        mainScript.downloadFile(artifactFilename, content);
+                        
+                        if (archiveManager) {
+                            // Use full path in filename, no additional folder processing
+                            await archiveManager.addFile(artifactFilename, content, false, '');
+                        } else {
+                            mainScript.downloadFile(artifactFilename, content);
+                        }
+                        
                         exportedCount++;
-                    });
-                });
-            });
+                    }
+                }
+            }
         }
         
         return exportedCount;
@@ -726,6 +772,19 @@
         const progress = createProgressUI(`Mass Export - Selected Projects (${exportMode === 'none' ? 'conversations only' : exportMode})`);
         
         try {
+            const mainScript = window.claudeExporter;
+            const settings = mainScript.loadSettings();
+            
+            // Determine if we should use archive
+            const useArchive = settings.forceArchiveForMassExport || settings.exportToArchive;
+            const useChatFolders = settings.forceChatFoldersForMassExport || settings.createChatFolders;
+            
+            let archiveManager = null;
+            if (useArchive) {
+                archiveManager = new mainScript.ArchiveManager();
+                await archiveManager.initialize();
+            }
+            
             let totalConversations = 0;
             let currentConversation = 0;
             let totalExported = 0;
@@ -745,7 +804,7 @@
                 
                 const project = projectData.project;
                 const chats = projectData.chats;
-                const folderName = sanitizeFileName(project.name);
+                const projectFolderName = sanitizeFileName(project.name);
                 
                 for (const chat of chats) {
                     if (progress.isCancelled()) return;
@@ -757,7 +816,8 @@
                     
                     try {
                         const fullConversationData = await getConversationData(chat.uuid);
-                        const exportedCount = await exportSingleConversation(fullConversationData, folderName, exportMode);
+                        
+                        const exportedCount = await exportSingleConversation(fullConversationData, exportMode, archiveManager, projectFolderName, useChatFolders);
                         totalExported += exportedCount;
                     } catch (error) {
                         console.warn(`Failed to export conversation ${chat.name}:`, error);
@@ -765,6 +825,13 @@
                     
                     await delay(200);
                 }
+            }
+
+            // Download archive if created
+            if (archiveManager && archiveManager.fileCount > 0) {
+                const timestamp = mainScript.generateTimestamp(new Date());
+                const archiveName = `Claude_Projects_Export_${timestamp}.zip`;
+                await archiveManager.downloadArchive(archiveName);
             }
 
             showNotification(`✅ Mass export completed! Downloaded ${totalExported} files from ${totalConversations} conversations across ${selectedData.length} projects`, 'success');
@@ -802,7 +869,7 @@
             }));
 
             createSelectionUI('Select Conversations to Export', conversationItems, async (selectedConversations) => {
-                await performConversationsExport(selectedConversations, '', exportMode);
+                await performConversationsExport(selectedConversations, exportMode);
             });
 
         } catch (error) {
@@ -811,10 +878,22 @@
         }
     }
 
-    async function performConversationsExport(selectedConversations, folderPrefix, exportMode) {
+    async function performConversationsExport(selectedConversations, exportMode) {
         const progress = createProgressUI(`Export Selected Conversations (${exportMode === 'none' ? 'conversations only' : exportMode})`);
         
         try {
+            const mainScript = window.claudeExporter;
+            const settings = mainScript.loadSettings();
+            
+            const useArchive = settings.forceArchiveForMassExport || settings.exportToArchive;
+            const useChatFolders = settings.forceChatFoldersForMassExport || settings.createChatFolders;
+            
+            let archiveManager = null;
+            if (useArchive) {
+                archiveManager = new mainScript.ArchiveManager();
+                await archiveManager.initialize();
+            }
+            
             let totalExported = 0;
 
             for (let i = 0; i < selectedConversations.length; i++) {
@@ -828,13 +907,21 @@
                 
                 try {
                     const fullConversationData = await getConversationData(conversation.uuid);
-                    const exportedCount = await exportSingleConversation(fullConversationData, folderPrefix, exportMode);
+                    
+                    const exportedCount = await exportSingleConversation(fullConversationData, exportMode, archiveManager, '', useChatFolders);
                     totalExported += exportedCount;
                 } catch (error) {
                     console.warn(`Failed to export conversation ${conversation.name}:`, error);
                 }
                 
                 await delay(200);
+            }
+
+            // Download archive if created
+            if (archiveManager && archiveManager.fileCount > 0) {
+                const timestamp = mainScript.generateTimestamp(new Date());
+                const archiveName = `Claude_Conversations_Export_${timestamp}.zip`;
+                await archiveManager.downloadArchive(archiveName);
             }
 
             showNotification(`✅ Export completed! Downloaded ${totalExported} files from ${selectedConversations.length} conversations`, 'success');
@@ -879,6 +966,18 @@
         const progress = createProgressUI(`Export Selected Recent Conversations (${exportMode === 'none' ? 'conversations only' : exportMode})`);
         
         try {
+            const mainScript = window.claudeExporter;
+            const settings = mainScript.loadSettings();
+            
+            const useArchive = settings.forceArchiveForMassExport || settings.exportToArchive;
+            const useChatFolders = settings.forceChatFoldersForMassExport || settings.createChatFolders;
+            
+            let archiveManager = null;
+            if (useArchive) {
+                archiveManager = new mainScript.ArchiveManager();
+                await archiveManager.initialize();
+            }
+            
             let totalExported = 0;
 
             for (let i = 0; i < selectedConversations.length; i++) {
@@ -893,18 +992,21 @@
                 try {
                     const fullConversationData = await getConversationData(conversation.uuid);
                     
-                    let folderName = '';
-                    if (fullConversationData.project && fullConversationData.project.name) {
-                        folderName = sanitizeFileName(fullConversationData.project.name);
-                    }
-                    
-                    const exportedCount = await exportSingleConversation(fullConversationData, folderName, exportMode);
+                    // Only useChatFolders
+                    const exportedCount = await exportSingleConversation(fullConversationData, exportMode, archiveManager, '', useChatFolders);
                     totalExported += exportedCount;
                 } catch (error) {
                     console.warn(`Failed to export conversation ${conversation.name}:`, error);
                 }
                 
                 await delay(200);
+            }
+
+            // Download archive if created
+            if (archiveManager && archiveManager.fileCount > 0) {
+                const timestamp = mainScript.generateTimestamp(new Date());
+                const archiveName = `Claude_Recent_Export_${timestamp}.zip`;
+                await archiveManager.downloadArchive(archiveName);
             }
 
             showNotification(`✅ Export completed! Downloaded ${totalExported} files from ${selectedConversations.length} conversations`, 'success');
@@ -964,7 +1066,6 @@
             exportAllProjects,
             exportCurrentProject,
             exportAllRecentConversations,
-            version: '2.0'
         };
         
         console.log('[Claude Mass Exporter] Enhanced export functionality activated!');
@@ -975,5 +1076,4 @@
     } else {
         init();
     }
-
 })();
