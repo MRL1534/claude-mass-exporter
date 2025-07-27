@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Claude Mass Exporter Library
 // @namespace    http://tampermonkey.net/
-// @version      3.2
+// @version      3.3
 // @description  Mass export library for Claude API Exporter
 // @author       MRL
 // @license      MIT
@@ -605,15 +605,23 @@
             // Mass export with project folders
             if (useChatFolders) {
                 // Project/Chat/ structure
-                const chatFolderName = sanitizeFileName(conversationData.name);
-                finalFolderPath = `${projectFolderName}/${chatFolderName}`;
+                const chatFolderName = mainScript.generateChatFolderName(
+                    conversationData, 
+                    { name: projectFolderName }, 
+                    settings.massExportChatFolderName
+                );
+                finalFolderPath = chatFolderName;
             } else {
                 // Project/ structure (files directly in project folder)
                 finalFolderPath = projectFolderName;
             }
         } else if (archiveManager && useChatFolders) {
             // Single export with chat folders (like main script)
-            finalFolderPath = sanitizeFileName(conversationData.name);
+            finalFolderPath = mainScript.generateChatFolderName(
+                conversationData, 
+                null, 
+                settings.chatFolderName
+            );
         }
 
         // For 'none' mode (conversation only), use simple approach
@@ -776,8 +784,8 @@
             const settings = mainScript.loadSettings();
             
             // Determine if we should use archive
-            const useArchive = settings.forceArchiveForMassExport || settings.exportToArchive;
-            const useChatFolders = settings.forceChatFoldersForMassExport || settings.createChatFolders;
+            const useArchive = settings.forceArchiveForMassExport;
+            const useChatFolders = settings.forceChatFoldersForMassExport;
             
             let archiveManager = null;
             if (useArchive) {
@@ -829,8 +837,13 @@
 
             // Download archive if created
             if (archiveManager && archiveManager.fileCount > 0) {
-                const timestamp = mainScript.generateTimestamp(new Date());
-                const archiveName = `Claude_Projects_Export_${timestamp}.zip`;
+                const archiveName = mainScript.generateArchiveName({
+                    name: `${selectedData.length} Projects Export`,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    uuid: 'mass-export'
+                }, settings.massExportArchiveName, true);
+                
                 await archiveManager.downloadArchive(archiveName);
             }
 
@@ -885,8 +898,8 @@
             const mainScript = window.claudeExporter;
             const settings = mainScript.loadSettings();
             
-            const useArchive = settings.forceArchiveForMassExport || settings.exportToArchive;
-            const useChatFolders = settings.forceChatFoldersForMassExport || settings.createChatFolders;
+            const useArchive = settings.forceArchiveForMassExport;
+            const useChatFolders = settings.forceChatFoldersForMassExport;
             
             let archiveManager = null;
             if (useArchive) {
@@ -919,8 +932,13 @@
 
             // Download archive if created
             if (archiveManager && archiveManager.fileCount > 0) {
-                const timestamp = mainScript.generateTimestamp(new Date());
-                const archiveName = `Claude_Conversations_Export_${timestamp}.zip`;
+                const archiveName = mainScript.generateArchiveName({
+                    name: `${selectedConversations.length} Conversations Export`,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    uuid: 'conversations-export'
+                }, settings.massExportArchiveName, true);
+                
                 await archiveManager.downloadArchive(archiveName);
             }
 
@@ -942,10 +960,6 @@
                 return;
             }
 
-            // Sort conversations by updated_at (newest first) - NOT REQUIRED
-            // const sortedConversations = conversations.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
-            
-            // UPDATE: const conversationItems = sortedConversations.map(conv => ({
             const conversationItems = conversations.map(conv => ({
                 ...conv,
                 name: conv.name,
@@ -969,8 +983,8 @@
             const mainScript = window.claudeExporter;
             const settings = mainScript.loadSettings();
             
-            const useArchive = settings.forceArchiveForMassExport || settings.exportToArchive;
-            const useChatFolders = settings.forceChatFoldersForMassExport || settings.createChatFolders;
+            const useArchive = settings.forceArchiveForMassExport;
+            const useChatFolders = settings.forceChatFoldersForMassExport;
             
             let archiveManager = null;
             if (useArchive) {
@@ -1004,8 +1018,13 @@
 
             // Download archive if created
             if (archiveManager && archiveManager.fileCount > 0) {
-                const timestamp = mainScript.generateTimestamp(new Date());
-                const archiveName = `Claude_Recent_Export_${timestamp}.zip`;
+                const archiveName = mainScript.generateArchiveName({
+                    name: `${selectedConversations.length} Recent Conversations Export`,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    uuid: 'recent-export'
+                }, settings.massExportArchiveName, true);
+                
                 await archiveManager.downloadArchive(archiveName);
             }
 
