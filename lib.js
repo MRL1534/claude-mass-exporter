@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Claude Mass Exporter Library
 // @namespace    http://tampermonkey.net/
-// @version      3.3
+// @version      3.4
 // @description  Mass export library for Claude API Exporter
 // @author       MRL
 // @license      MIT
@@ -842,7 +842,7 @@
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                     uuid: 'mass-export'
-                }, settings.massExportArchiveName, true);
+                }, settings.massExportArchiveName, true, 'Projects');
                 
                 await archiveManager.downloadArchive(archiveName);
             }
@@ -937,7 +937,7 @@
                     created_at: new Date().toISOString(),
                     updated_at: new Date().toISOString(),
                     uuid: 'conversations-export'
-                }, settings.massExportArchiveName, true);
+                }, settings.massExportArchiveName, true, 'Conversations');
                 
                 await archiveManager.downloadArchive(archiveName);
             }
@@ -960,6 +960,10 @@
                 return;
             }
 
+            // Sort conversations by updated_at (newest first) - NOT REQUIRED
+            // const sortedConversations = conversations.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+            
+            // UPDATE: const conversationItems = sortedConversations.map(conv => ({
             const conversationItems = conversations.map(conv => ({
                 ...conv,
                 name: conv.name,
